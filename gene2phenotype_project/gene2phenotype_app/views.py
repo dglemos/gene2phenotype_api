@@ -607,15 +607,6 @@ class AddCurationData(BaseAdd):
     serializer_class = CurationDataSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def get(self, request, *args, **kwargs):
-        user = self.request.user
-        if user.is_authenticated:
-            response = Response({"message": "This endpoint is for curation. Use POST to submit data."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
-        else:
-            response = Response({"message": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
-
-        return response
-
     def post(self, request):
         user = self.request.user
 
