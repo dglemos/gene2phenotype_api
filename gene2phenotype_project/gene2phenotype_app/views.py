@@ -619,6 +619,8 @@ class LocusGenotypeDiseaseAddPanel(BaseAdd):
         return response
 
 
+
+### Curation data
 """
     Add a new curation entry.
     It is only available for authenticated users.
@@ -717,3 +719,17 @@ class CurationDataDetail(BaseView):
                 'data': curation_data_obj.json_data,
             }
         return Response(response_data)
+
+class UpdateCurationData(generics.UpdateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = CurationData.objects.all()
+    serializer_class = CurationDataSerializer
+    lookup_field = 'session_name'
+
+    # def get_queryset(self):
+    #     stable_id = self.kwargs.get('stable_id')
+    #     queryset = CurationData.objects.filter(stable_id__stable_id=stable_id)
+    #     return queryset
+
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
