@@ -272,12 +272,14 @@ class DiseaseSummary(DiseaseDetail):
             pmids (str): A comma-separated string of PMIDs
 
     Return:
-            Response object containing publication data for each PMID:
-                - pmid
-                - title
-                - authors
-                - year
-                - source (possible values: 'G2P', 'EuropePMC (PMID not found in G2P)', 'Not found')
+            Response object includes:
+                - results (list): contains publication data for each publication
+                                    - pmid
+                                    - title
+                                    - authors
+                                    - year
+                                    - source (possible values: 'G2P', 'EuropePMC', 'Not found')
+                - count (int): number of PMIDs in the response
             If a PMID is invalid it returns Http404
 """
 @api_view(['GET'])
@@ -322,7 +324,7 @@ def PublicationDetail(request, pmids):
                         'title': title,
                         'authors': authors,
                         'year': int(year),
-                        'source': 'EuropePMC (PMID not found in G2P)'
+                        'source': 'EuropePMC'
                     })
 
         except:
