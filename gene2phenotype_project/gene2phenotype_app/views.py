@@ -24,7 +24,7 @@ from gene2phenotype_app.models import (Panel, User, AttribType, Attrib,
                                        LocusAttrib, GeneDisease, G2PStableID,
                                        CurationData, Publication)
 
-from .utils import get_publication, get_authors
+from .utils import get_publication, get_authors, clean_omim_disease
 
 
 class BaseView(generics.ListAPIView):
@@ -191,6 +191,21 @@ class GeneFunction(BaseView):
 
         return Response(response_data)
 
+"""
+    Retrieves all diseases associated with a specific gene.
+
+    Args:
+            gene_name (str): gene symbol or the synonym symbol
+
+    Return:
+            Response object includes:
+                - results (list): contains disease data
+                                    - original_disease_name
+                                    - disease_name
+                                    - identifier
+                                    - source name
+                - count (int): number of diseases associated with the gene
+"""
 class GeneDiseaseView(BaseView):
     serializer_class = GeneDiseaseSerializer
 
@@ -214,6 +229,23 @@ class GeneDiseaseView(BaseView):
                 self.handle_no_permission('Gene-Disease association', name)
 
         return queryset
+
+    def get(self, request, name, *args, **kwargs):
+        queryset = self.get_queryset()
+        results = []
+        for gene_disease_obj in queryset:
+            # Return the original disease name and the clean version (without subtype)
+            # In the future, we will import diseases from other sources (Mondo, GenCC)
+            new_disease_name = clean_omim_disease(gene_disease_obj.disease)
+            results.append({
+                            'original_disease_name': gene_disease_obj.disease,
+                            'disease_name': new_disease_name,
+                            'identifier': gene_disease_obj.identifier,
+                            'source': gene_disease_obj.source.name
+                           })
+
+        return Response({'results': results, 'count': len(results)})
+
 
 class DiseaseDetail(BaseView):
     serializer_class = DiseaseDetailSerializer
@@ -376,6 +408,25 @@ class AttribList(generics.ListAPIView):
         queryset = self.get_queryset()
         code_list = [attrib.value for attrib in queryset]
         return Response({'results':code_list, 'count':len(code_list)})
+
+"""
+    Retrives a list of all variant consequences terms by type.
+"""
+class VariantConsequenceList(generics.ListAPIView):
+    def get_queryset(self):
+        group = Attrib.objects.filter(value="variant_consequence", type__code="ontology_term_group")
+        return OntologyTerm.objects.filter(group_type=group.first().id)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        list_nmd = []
+        list = []
+        for obj in queryset:
+            if "NMD" in obj.term:
+                list_nmd.append({"term": obj.term, "accession":obj.accession})
+            else:
+                list.append({"term": obj.term, "accession":obj.accession})
+        return Response({'NMD_consequences':list_nmd, 'other_consequences': list})
 
 class LocusGenotypeDiseaseDetail(BaseView):
     serializer_class = LocusGenotypeDiseaseSerializer
