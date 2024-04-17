@@ -410,23 +410,36 @@ class AttribList(generics.ListAPIView):
         return Response({'results':code_list, 'count':len(code_list)})
 
 """
-    Retrives a list of all variant consequences terms by type.
+    Retrives a list of all variant types.
 """
-class VariantConsequenceList(generics.ListAPIView):
+class VariantTypesList(generics.ListAPIView):
     def get_queryset(self):
-        group = Attrib.objects.filter(value="variant_consequence", type__code="ontology_term_group")
+        group = Attrib.objects.filter(value="variant_type", type__code="ontology_term_group")
         return OntologyTerm.objects.filter(group_type=group.first().id)
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         list_nmd = []
+        list_splice = []
+        list_regulatory = []
+        list_protein = []
         list = []
         for obj in queryset:
             if "NMD" in obj.term:
                 list_nmd.append({"term": obj.term, "accession":obj.accession})
+            elif "splice_" in obj.term:
+                list_splice.append({"term": obj.term, "accession":obj.accession})
+            elif "regulatory" in obj.term or "UTR" in obj.term:
+                list_regulatory.append({"term": obj.term, "accession":obj.accession})
+            elif "missense" in obj.term or "frame" in obj.term or "start" in obj.term or "stop" in obj.term:
+                list_protein.append({"term": obj.term, "accession":obj.accession})
             else:
                 list.append({"term": obj.term, "accession":obj.accession})
-        return Response({'NMD_consequences':list_nmd, 'other_consequences': list})
+        return Response({'NMD_variants': list_nmd,
+                         'splice_variants': list_splice,
+                         'regulatory_variants': list_regulatory,
+                         'protein_changing_variants': list_protein,
+                         'other_variants': list})
 
 class LocusGenotypeDiseaseDetail(BaseView):
     serializer_class = LocusGenotypeDiseaseSerializer
