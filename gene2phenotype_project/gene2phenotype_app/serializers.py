@@ -117,6 +117,11 @@ class PanelDetailSerializer(serializers.ModelSerializer):
         else:
             return []
 
+    # Get stats from database (table 'panel')
+    def stats_from_db(self, panel):
+        return panel.stats
+
+    # Calculate stats on the fly
     def calculate_stats(self, panel):
         lgd_panels = LGDPanel.objects.filter(panel=panel.id)
         num_records = 0
