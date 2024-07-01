@@ -7,11 +7,13 @@ from django.db import transaction
 
 from gene2phenotype_app.serializers import (UserSerializer,
                                             LocusGenotypeDiseaseSerializer,
-                                            LGDPanelSerializer)
+                                            LGDPanelSerializer, LGDPublicationSerializer,
+                                            PublicationSerializer)
 
 from gene2phenotype_app.models import (User, Attrib,
                                        LocusGenotypeDisease, OntologyTerm,
-                                       G2PStableID, CVMolecularMechanism)
+                                       G2PStableID, CVMolecularMechanism,
+                                       LGDPublication)
 
 from .base import BaseView, BaseAdd
 
@@ -182,5 +184,77 @@ class LocusGenotypeDiseaseAddPanel(BaseAdd):
             response = Response({'message': 'Panel added to the G2P entry successfully.'}, status=status.HTTP_200_OK)
         else:
             response = Response({"message": "Error adding a panel", "details": serializer_class.errors}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return response
+
+class LGDAddPublication(BaseAdd):
+    """
+        Add publication to an existing G2P record (LGD).
+    """
+    serializer_class = LGDPublicationSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    @transaction.atomic
+    def post(self, request, stable_id):
+        """
+            The post method links the current LGD record to publication(s).
+            We want to whole process to be done in one db transaction.
+        """
+        user = self.request.user
+
+        if not user.is_authenticated:
+            return Response({"message": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Check if user can update entry
+        user_obj = get_object_or_404(User, email=user)
+        serializer = UserSerializer(user_obj, context={'user' : user})
+        user_panel_list_lower = [panel.lower() for panel in serializer.panels_names(user_obj)]
+
+        g2p_stable_id = get_object_or_404(G2PStableID, stable_id=stable_id)
+ 
+        # Fetch the G2P entry for the stable_id
+        lgd_queryset = LocusGenotypeDisease.objects.filter(
+            stable_id=g2p_stable_id,
+            is_deleted=0
+        )
+
+        if not lgd_queryset:
+            return Response({"message": f"No G2P entry found for ID {stable_id}"}, status=status.HTTP_404_NOT_FOUND)
+
+        lgd_obj = lgd_queryset.first()
+
+        # Get the panels associated with this stable_id
+        lgd_panel_select = lgd_queryset.prefetch_related('lgdpanel').values('lgdpanel__panel__name')
+
+        panel_found = 0
+        for panel in lgd_panel_select:
+            if panel['lgdpanel__panel__name'].lower() in user_panel_list_lower:
+                panel_found = 1
+
+        if not panel_found:
+            return Response({"message": f"No permission to update G2P entry {stable_id}"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Input data format:
+        #        "publication": {
+        #            "pmid": 1234,
+        #            "comments": [],
+        #            "number_of_families": []
+        #        }
+        publication_data = request.data.get('publication', None)
+
+        # get or create publication object
+        # If publicatiom (PMID) already exists then it's going to add new comments and/or families info
+        publication_obj = PublicationSerializer(context={'user': user_obj}).create(publication_data)
+
+        print("Publication:", publication_obj)
+
+        # Add publication to G2P entry
+        serializer_class = LGDPublicationSerializer(data={"publication":publication_data}, context={'lgd': lgd_obj})
+
+        if serializer_class.is_valid():
+            serializer_class.save()
+            response = Response({'message': 'Publication added to the G2P entry successfully.'}, status=status.HTTP_200_OK)
+        else:
+            response = Response({"message": "Error adding publication", "details": serializer_class.errors}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return response

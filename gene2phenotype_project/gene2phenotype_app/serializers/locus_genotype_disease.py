@@ -758,6 +758,8 @@ class LGDPublicationSerializer(serializers.ModelSerializer):
                     LGDPublication object
         """
 
+        print("lgd publication:", validated_data)
+
         lgd = self.context['lgd']
         publication_obj = validated_data.get('publication') # TODO REVIEW
 

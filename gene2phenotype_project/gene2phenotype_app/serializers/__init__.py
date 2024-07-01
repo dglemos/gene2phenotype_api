@@ -15,6 +15,6 @@ from .disease import (DiseaseSerializer, DiseaseOntologyTermSerializer,
                       GeneDiseaseSerializer)
 
 from .locus_genotype_disease import (LocusGenotypeDiseaseSerializer,
-                                     LGDPanelSerializer)
+                                     LGDPanelSerializer, LGDPublicationSerializer)
 
 from .curation import CurationDataSerializer
