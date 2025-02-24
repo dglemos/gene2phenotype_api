@@ -221,7 +221,7 @@ class LGDUpdateConfidence(BaseUpdate):
 class LGDUpdateMechanism(BaseUpdate):
     http_method_names = ['patch', 'options']
     serializer_class = LocusGenotypeDiseaseSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsSuperUser]
 
     def get_queryset(self):
         """
