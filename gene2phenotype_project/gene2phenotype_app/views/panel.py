@@ -2,6 +2,7 @@ from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.http import Http404, HttpResponse
+from django.db.models import Q
 from rest_framework.decorators import api_view
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
 from django.db import transaction
@@ -462,6 +463,7 @@ def PanelDownload(request, name):
     """
 
     user_email = request.user
+    panel = None
 
     # Get user
     try:
@@ -469,11 +471,20 @@ def PanelDownload(request, name):
     except User.DoesNotExist:
         user_obj = None
 
-    # Check if panel is valid
-    try:
-        panel = Panel.objects.get(name=name)
-    except Panel.DoesNotExist:
-        raise Http404(f"No matching panel found for: {name}")
+    # If name = "all" the view downloads all panels
+    all_panels = False  # By default, we don't download all panels
+    only_visible_panels = True
+    if name.lower() == "all":
+        all_panels = True
+        if user_obj is not None:
+            # Authenticated users can access non-visible panels
+            only_visible_panels = False
+    else:
+        # Check if panel is valid
+        try:
+            panel = Panel.objects.get(name=name)
+        except Panel.DoesNotExist:
+            raise Http404(f"No matching panel found for: {name}")
 
     # Get date to attach to filename
     date_now = datetime.today().strftime("%Y-%m-%d")
@@ -591,9 +602,8 @@ def PanelDownload(request, name):
 
     # Preload panels
     lgd_panel_data = {}
-    # Return all visible panels
     queryset_lgd_panel = (
-        LGDPanel.objects.filter(is_deleted=0, panel__is_visible=1)
+        LGDPanel.objects.filter(is_deleted=0)
         .select_related("lgd__id", "panel__name")
         .values("lgd__id", "panel__name")
     )
@@ -650,14 +660,26 @@ def PanelDownload(request, name):
 
     # Authenticated users can download all panels
     # Non authenticated users can only download visible panels
-    if panel.is_visible == 1 or (
-        user_obj and user_obj.is_authenticated and panel.is_visible == 0
-    ):
+    if (
+        panel
+        and (
+            panel.is_visible == 1
+            or (user_obj and user_obj.is_authenticated and panel.is_visible == 0)
+        )
+    ) or all_panels:
+        if panel:
+            # Download specific panel
+            filter_query = Q(is_deleted=0, is_reviewed=1, lgdpanel__panel=panel)
+        elif all_panels and only_visible_panels:
+            # Download all visible panels
+            filter_query = Q(is_deleted=0, is_reviewed=1, lgdpanel__panel__is_visible=1)
+        elif all_panels and not only_visible_panels:
+            # Download all visible and non-visible panels excluding Demo panel
+            filter_query = Q(is_deleted=0, is_reviewed=1) & ~Q(lgdpanel__panel__name="Demo")
+
         # Download reviewed entries
         queryset_list = (
-            LocusGenotypeDisease.objects.filter(
-                is_deleted=0, is_reviewed=1, lgdpanel__panel=panel
-            )
+            LocusGenotypeDisease.objects.filter(filter_query)
             .distinct()
             .select_related(
                 "stable_id",
