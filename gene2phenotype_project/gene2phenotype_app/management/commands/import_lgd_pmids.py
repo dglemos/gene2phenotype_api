@@ -23,6 +23,7 @@ if it's possible to fetch the current record.
 
 logger = logging.getLogger(__name__)
 
+
 class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
@@ -37,12 +38,24 @@ class Command(BaseCommand):
             type=str,
             help="User email to store in the history table",
         )
+        parser.add_argument(
+            "--output_definitive",
+            required=False,
+            type=str,
+            help="Output file to write list of definitive records with one publication",
+        )
 
     def handle(self, *args, **options):
         data_file = options["data_file"]
         input_email = options["email"]
-        output_file = "output_data.txt"
+
         unique_current_g2p_ids = []
+
+        # Prepare output files
+        output_definitive = options["output_definitive"]
+        output_file = "output_data.txt"
+        if not output_definitive:
+            output_definitive = "definitive_records_one_publication.txt"
 
         # Get user info
         try:
@@ -50,15 +63,23 @@ class Command(BaseCommand):
         except Exception as e:
             raise CommandError(str(e))
 
-        with open(data_file, newline="", encoding='latin-1') as fh_file, open(output_file, "w") as wr:
+        with (
+            open(data_file, newline="", encoding="latin-1") as fh_file,
+            open(output_file, "w") as wr,
+        ):
             data_reader = csv.DictReader(fh_file)
             for row in data_reader:
                 output_comment = ""
                 record_to_update = None
                 gene_symbol = row["gene symbol"].strip()
-                genotype = row["allelic requirement"].strip().replace("\'", "")
-                disease_name = row["disease name"].strip().replace("\'", "")
-                variant_consequence = row["variant consequence"].strip().replace("_variant", "").replace("_", " ")
+                genotype = row["allelic requirement"].strip().replace("'", "")
+                disease_name = row["disease name"].strip().replace("'", "")
+                variant_consequence = (
+                    row["variant consequence"]
+                    .strip()
+                    .replace("_variant", "")
+                    .replace("_", " ")
+                )
 
                 if genotype == "monoallelic_X_hem":
                     genotype = "monoallelic_X_hemizygous"
@@ -73,8 +94,7 @@ class Command(BaseCommand):
 
                 # Get records linked to the gene symbol
                 lgd_records = LocusGenotypeDisease.objects.filter(
-                    locus__name = gene_symbol,
-                    is_deleted = 0
+                    locus__name=gene_symbol, is_deleted=0
                 )
 
                 if len(lgd_records) > 1:
@@ -83,30 +103,44 @@ class Command(BaseCommand):
                     for record in lgd_records:
                         # print(f"{gene_symbol} ({genotype}; {disease_name}; {variant_consequence}) > found {record.stable_id.stable_id}; {record.genotype}; {record.disease.name}; {record.mechanism.value}")
 
-                        if str(record.genotype) == genotype and variant_consequence and variant_consequence == record.mechanism.value:
+                        if (
+                            str(record.genotype) == genotype
+                            and variant_consequence
+                            and variant_consequence == record.mechanism.value
+                        ):
                             tmp_record = record
                             # print(f"(1) {record.genotype} = {genotype}")
                         else:
-                            record_disease_new = re.sub(f"{gene_symbol}-related ", "", record.disease.name)
-                            if record_disease_new.lower() in disease_name.lower() and str(record.genotype) == genotype:
+                            record_disease_new = re.sub(
+                                f"{gene_symbol}-related ", "", record.disease.name
+                            )
+                            if (
+                                record_disease_new.lower() in disease_name.lower()
+                                and str(record.genotype) == genotype
+                            ):
                                 tmp_record = record
                                 # print(f"(2) {record.genotype} = {genotype}; {record_disease_new} in {disease_name}")
 
                     if not tmp_record:
                         logger.warning(f"Cannot find unique record for {gene_symbol}")
-                        wr.write(f"{row['id']}\tCannot find unique record for {gene_symbol}\n")
+                        wr.write(
+                            f"{row['id']}\tCannot find unique record for {gene_symbol}\n"
+                        )
                         continue
                     else:
                         record_to_update = tmp_record
                 else:
                     # Even though there is only one record in the current db we should check if it's the same
                     tmp_record = lgd_records[0]
-                    record_disease_new = re.sub(f"{gene_symbol}-related ", "", tmp_record.disease.name)
+                    record_disease_new = re.sub(
+                        f"{gene_symbol}-related ", "", tmp_record.disease.name
+                    )
                     # print(f"\n{gene_symbol} ({genotype}; {disease_name}; {variant_consequence}) > found {tmp_record.stable_id.stable_id}; {tmp_record.genotype}; {tmp_record.disease.name}; {tmp_record.mechanism.value}")
-                    if (str(tmp_record.genotype) == genotype and 
-                        (variant_consequence and variant_consequence == tmp_record.mechanism.value or 
-                         record_disease_new.lower() in disease_name.lower())
-                        ):
+                    if str(tmp_record.genotype) == genotype and (
+                        variant_consequence
+                        and variant_consequence == tmp_record.mechanism.value
+                        or record_disease_new.lower() in disease_name.lower()
+                    ):
                         record_to_update = tmp_record
                     else:
                         wr.write(f"{row['id']}\tCannot find record for {gene_symbol}\n")
@@ -118,8 +152,12 @@ class Command(BaseCommand):
                 if g2p_id not in unique_current_g2p_ids:
                     unique_current_g2p_ids.append(g2p_id)
                 else:
-                    logger.warning(f"{g2p_id} is already mapped to a record. Check {gene_symbol}")
-                    wr.write(f"{row['id']}\t{g2p_id} is already mapped to a record. Check {gene_symbol}\n")
+                    logger.warning(
+                        f"{g2p_id} is already mapped to a record. Check {gene_symbol}"
+                    )
+                    wr.write(
+                        f"{row['id']}\t{g2p_id} is already mapped to a record. Check {gene_symbol}\n"
+                    )
                     continue
 
                 # print(f"\nGoing to update {g2p_id}")
@@ -132,7 +170,7 @@ class Command(BaseCommand):
                 # Get list of pmids already associated with record
                 # We want all records even if they are deteled
                 lgd_publication_list = LGDPublication.objects.filter(
-                    lgd = record_to_update
+                    lgd=record_to_update
                 )
 
                 existing_pmids = []
@@ -143,7 +181,7 @@ class Command(BaseCommand):
                         existing_pmids_deleted.append(lgd_publication.publication.pmid)
                     else:
                         existing_pmids.append(lgd_publication.publication.pmid)
-                
+
                 # print("Existing pmids:", existing_pmids)
                 # print("Existing pmids deleted:", existing_pmids_deleted)
                 # print("(file) existing pmids:", existing_ddg2p_pmids_file)
@@ -152,11 +190,17 @@ class Command(BaseCommand):
                 # We shouldn't have deleted lgd-publications
                 # Kill the import if we have deleted rows
                 if existing_pmids_deleted:
-                    raise CommandError(f"There are deleted LGD-publication rows. Update the import script.")
+                    raise CommandError(
+                        f"There are deleted LGD-publication rows. Update the import script."
+                    )
 
                 if int(existing_ddg2p_pmids_file) not in existing_pmids:
-                    print(f"{g2p_id} is not associated with {existing_ddg2p_pmids_file};")
-                    output_comment += f"{g2p_id} is not associated with {existing_ddg2p_pmids_file}; "
+                    print(
+                        f"{g2p_id} is not associated with {existing_ddg2p_pmids_file};"
+                    )
+                    output_comment += (
+                        f"{g2p_id} is not associated with {existing_ddg2p_pmids_file}; "
+                    )
 
                 if not list_pmids_to_add or list_pmids_to_add[0] == "":
                     print(f"No pmids to add for {g2p_id};")
@@ -169,7 +213,7 @@ class Command(BaseCommand):
                             # Get or create Publication
                             try:
                                 publication_obj = Publication.objects.get(
-                                    pmid = int(pmid_to_add)
+                                    pmid=int(pmid_to_add)
                                 )
                             except Publication.DoesNotExist:
                                 response = get_publication(int(pmid_to_add))
@@ -187,7 +231,11 @@ class Command(BaseCommand):
 
                                 # Insert publication
                                 publication_obj = Publication(
-                                    pmid=int(pmid_to_add), title=title, authors=authors, year=year, doi=doi
+                                    pmid=int(pmid_to_add),
+                                    title=title,
+                                    authors=authors,
+                                    year=year,
+                                    doi=doi,
                                 )
                                 publication_obj._history_user = user_obj
                                 publication_obj.save()
@@ -195,9 +243,9 @@ class Command(BaseCommand):
                             # print("Creating lgd publication")
                             # Create LGDPublication
                             lgd_publication_obj = LGDPublication(
-                                lgd = record_to_update,
-                                publication = publication_obj,
-                                is_deleted = 0
+                                lgd=record_to_update,
+                                publication=publication_obj,
+                                is_deleted=0,
                             )
                             lgd_publication_obj._history_user = user_obj
                             lgd_publication_obj.save()
@@ -213,20 +261,24 @@ class Command(BaseCommand):
 
         # Check remaining definitive records with only one publication
         lgd_records_definitive = LocusGenotypeDisease.objects.filter(
-            confidence__value = "definitive",
-            is_deleted = 0
+            confidence__value="definitive", is_deleted=0
         ).prefetch_related(
-                Prefetch(
-                    "lgdpublication_set",
-                    queryset=LGDPublication.objects.filter(is_deleted=0),
-                    to_attr="publications"
-                )
+            Prefetch(
+                "lgdpublication_set",
+                queryset=LGDPublication.objects.filter(is_deleted=0),
+                to_attr="publications",
             )
+        )
 
-        print("\nDefinitve records with only one publication:")
+        with open(output_definitive, "w") as wr_2:
+            wr_2.write("G2P ID\tGene\tDisease\tGenotype\tMechanism\tURL")
 
-        for lgd_obj in lgd_records_definitive:
-            lgd_publications = lgd_obj.publications
+            for lgd_obj in lgd_records_definitive:
+                lgd_publications = lgd_obj.publications
 
-            if len(lgd_publications) == 1:
-                print(f"{lgd_obj.stable_id.stable_id}; gene: {lgd_obj.locus.name}; disease: {lgd_obj.disease.name}; genotype: {lgd_obj.genotype.value}; mechanism: {lgd_obj.mechanism.value}")
+                if len(lgd_publications) == 1:
+                    g2p_id = lgd_obj.stable_id.stable_id
+                    url = f"https://www.ebi.ac.uk/gene2phenotype/lgd/{g2p_id}"
+                    wr_2.write(
+                        f"{g2p_id}\t{lgd_obj.locus.name}\t{lgd_obj.disease.name}\t{lgd_obj.genotype.value}\t{lgd_obj.mechanism.value}\t{url}\n"
+                    )
