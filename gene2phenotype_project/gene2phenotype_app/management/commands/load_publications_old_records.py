@@ -5,7 +5,7 @@ import logging
 from django.db.models import Prefetch
 from django.core.management.base import BaseCommand, CommandError
 
-from ...utils import get_publication, get_authors, clean_title, get_date_now
+from ...utils import get_publication, get_authors, clean_title
 
 from gene2phenotype_app.models import (
     Publication,
@@ -17,8 +17,8 @@ from gene2phenotype_app.models import (
 
 """
 Command to import pmids from a csv file.
-The pmids are associated with old G2P records, before adding the pmid we have to check
-if it's possible to fetch the current record.
+This command is to be used when the new pmids are associated with old G2P records.
+Before adding the pmid we have to check if it's possible to fetch the current record.
 """
 
 logger = logging.getLogger(__name__)
@@ -191,7 +191,7 @@ class Command(BaseCommand):
                 # Kill the import if we have deleted rows
                 if existing_pmids_deleted:
                     raise CommandError(
-                        f"There are deleted LGD-publication rows. Update the import script."
+                        "There are deleted LGD-publication rows. Update the import script."
                     )
 
                 if int(existing_ddg2p_pmids_file) not in existing_pmids:
@@ -251,11 +251,6 @@ class Command(BaseCommand):
                             lgd_publication_obj.save()
 
                             output_comment += f"added:{pmid_to_add}; "
-
-                            # Update the record date of last review
-                            # record_to_update._history_user = user_obj
-                            # record_to_update.date_review = get_date_now()
-                            # record_to_update.save()
 
                 wr.write(f"{row['id']}\t{output_comment}\n")
 
