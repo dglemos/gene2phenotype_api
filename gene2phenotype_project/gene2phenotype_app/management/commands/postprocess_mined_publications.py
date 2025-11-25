@@ -10,10 +10,11 @@ from gene2phenotype_app.models import (
 
 
 """
-Command to delete certain mined publications.
+Command to delete mined publication for records with more
+than 100 mined publications.
 
 How to run the command:
-python manage.py postprocess_mined_publications --email <email>
+python manage.py postprocess_mined_publications
 """
 
 logger = logging.getLogger(__name__)
@@ -23,20 +24,12 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "--email",
-            required=True,
+            required=False,
             type=str,
             help="User email to store in the history table",
         )
 
     def handle(self, *args, **options):
-        input_email = options["email"]
-
-        # Get user info
-        try:
-            user_obj = User.objects.get(email=input_email)
-        except User.DoesNotExist:
-            raise CommandError(f"Invalid user {input_email}")
-        
         record_mined_publications_count = self.get_mined_publications_count()
 
         for g2p_id in record_mined_publications_count:
@@ -53,7 +46,6 @@ class Command(BaseCommand):
                     if len(publication_to_keep) < 100:
                         publication_to_keep.append(lgd_mined_publication)
                     else:
-                        lgd_mined_publication._history_user(user_obj)
                         lgd_mined_publication.delete()
 
     def get_mined_publications_count(self):
