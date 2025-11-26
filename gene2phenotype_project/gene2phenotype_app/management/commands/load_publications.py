@@ -10,6 +10,7 @@ from ...utils import get_publication, get_authors, clean_title
 from gene2phenotype_app.models import (
     Publication,
     LGDPublication,
+    LGDMinedPublication,
     LocusGenotypeDisease,
     User,
 )
@@ -169,6 +170,20 @@ class Command(BaseCommand):
                                 lgd_publication_obj.save()
 
                                 output_comment += f"added:{pmid_to_add}; "
+
+                                # Check if new publication is in mined_publication
+                                try:
+                                    lgd_mined_publication = LGDMinedPublication.objects.get(
+                                        lgd=lgd_record,
+                                        mined_publication__pmid=publication_obj.pmid,
+                                        status="mined"
+                                    )
+                                except LGDMinedPublication.DoesNotExist:
+                                    continue
+                                else:
+                                    lgd_mined_publication._history_user = user_obj
+                                    lgd_mined_publication.status = "curated"
+                                    lgd_mined_publication.save()
 
                     wr.write(f"{g2p_id}\t{output_comment}\n")
 
